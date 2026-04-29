@@ -1,0 +1,6 @@
+target/
+*.class
+.claude/
+tmp/
+data/
+.DS_Store
