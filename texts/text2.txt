@@ -1,0 +1,10 @@
+Hadoop est une plateforme de traitement distribué développée par Apache.
+Map Reduce est un modèle de programmation pour le traitement de grandes données.
+Le modèle consiste en deux phases principales : la phase map et la phase reduce.
+Dans la phase map chaque tâche traite une partie des données en entrée.
+Dans la phase reduce les résultats partiels sont agrégés pour former le résultat final.
+Le chat adore la phase de sommeil profond. Le chat dort encore.
+Les sockets permettent la communication entre processus sur un réseau.
+Python propose le module socket pour créer des connexions réseau facilement.
+La programmation réseau est essentielle pour les systèmes distribués modernes.
+Le monde de la programmation est vaste et passionnant à explorer chaque jour.

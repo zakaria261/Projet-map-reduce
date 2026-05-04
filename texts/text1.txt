@@ -1,0 +1,7 @@
+Le chat est sur le tapis. Le chat mange sa nourriture. La souris court vite.
+Le tapis est rouge et le chat dort dessus. La souris a peur du chat.
+Bonjour le monde. Le monde est grand et beau. Bonjour encore une fois.
+Le soleil brille sur le monde. Le chat regarde le soleil.
+Python est un langage de programmation puissant et simple à apprendre.
+La programmation distribue les tâches sur plusieurs machines.
+Le chat le chat le chat aime dormir sur le tapis rouge.
