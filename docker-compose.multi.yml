@@ -1,0 +1,58 @@
+# ══════════════════════════════════════════════════════════════
+# docker-compose.multi.yml — Cluster multi-machine (même Wi-Fi)
+#
+# Scénario :
+#   - TES POTES lancent chacun un container MAP sur leur PC
+#   - TOI tu lances ce fichier (reducers + coordinator)
+#
+# Avant de lancer, définis MAP_HOSTS dans .env :
+#   MAP_HOSTS=192.168.1.42:6000,192.168.1.43:6001,192.168.1.44:6002
+#
+# Usage :
+#   cp .env.example .env          # remplis MAP_HOSTS avec les vraies IPs
+#   docker-compose -f docker-compose.multi.yml up --build
+# ══════════════════════════════════════════════════════════════
+
+version: "3.8"
+
+services:
+
+  # ── Workers REDUCE (tournent sur TA machine) ─────────────────
+  reduce-0:
+    build: .
+    container_name: mapreduce-reduce-0
+    command: python reduce_worker.py 0 3 2
+    environment:
+      - MAP_HOSTS=${MAP_HOSTS}   # ex: "192.168.1.42:6000,192.168.1.43:6001,192.168.1.44:6002"
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - mapreduce-output:/app/output
+    network_mode: host            # accès direct au réseau LAN
+
+  reduce-1:
+    build: .
+    container_name: mapreduce-reduce-1
+    command: python reduce_worker.py 1 3 2
+    environment:
+      - MAP_HOSTS=${MAP_HOSTS}
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - mapreduce-output:/app/output
+    network_mode: host
+
+  # ── Coordinator (sur TA machine) ─────────────────────────────
+  coordinator:
+    build: .
+    container_name: mapreduce-coordinator
+    command: python coordinator.py --mode docker --reducers 2
+    environment:
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - mapreduce-output:/app/output
+    network_mode: host
+    depends_on:
+      - reduce-0
+      - reduce-1
+
+volumes:
+  mapreduce-output:

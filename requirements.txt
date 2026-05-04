@@ -1,0 +1,3 @@
+# Dépendances Python du projet MapReduce
+# Actuellement aucune bibliothèque externe (stdlib uniquement)
+# Ajouter ici si on intègre matplotlib, flask, etc.

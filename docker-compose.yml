@@ -1,0 +1,104 @@
+# ══════════════════════════════════════════════════════════════
+# docker-compose.yml — Simulation locale du cluster MapReduce
+#
+# Lance 3 workers MAP + 2 workers REDUCE + 1 coordinator
+# sur la même machine, dans des containers séparés.
+#
+# Usage :
+#   docker-compose up --build
+#   docker-compose down -v
+# ══════════════════════════════════════════════════════════════
+
+version: "3.8"
+
+services:
+
+  # ── Workers MAP (un par fichier texte) ──────────────────────
+  map-0:
+    build: .
+    container_name: mapreduce-map-0
+    command: python map_worker.py 0 texts/text1.txt 2
+    environment:
+      - BIND_HOST=0.0.0.0
+    ports:
+      - "6000:6000"   # exposé pour mode multi-machine si besoin
+    networks:
+      - mapreduce-net
+
+  map-1:
+    build: .
+    container_name: mapreduce-map-1
+    command: python map_worker.py 1 texts/text2.txt 2
+    environment:
+      - BIND_HOST=0.0.0.0
+    ports:
+      - "6001:6001"
+    networks:
+      - mapreduce-net
+
+  map-2:
+    build: .
+    container_name: mapreduce-map-2
+    command: python map_worker.py 2 texts/text3.txt 2
+    environment:
+      - BIND_HOST=0.0.0.0
+    ports:
+      - "6002:6002"
+    networks:
+      - mapreduce-net
+
+  # ── Workers REDUCE ───────────────────────────────────────────
+  reduce-0:
+    build: .
+    container_name: mapreduce-reduce-0
+    command: python reduce_worker.py 0 3 2
+    environment:
+      - MAP_HOST_PREFIX=map-    # → se connecte à map-0, map-1, map-2
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - mapreduce-output:/app/output
+    networks:
+      - mapreduce-net
+    depends_on:
+      - map-0
+      - map-1
+      - map-2
+
+  reduce-1:
+    build: .
+    container_name: mapreduce-reduce-1
+    command: python reduce_worker.py 1 3 2
+    environment:
+      - MAP_HOST_PREFIX=map-
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - mapreduce-output:/app/output
+    networks:
+      - mapreduce-net
+    depends_on:
+      - map-0
+      - map-1
+      - map-2
+
+  # ── Coordinator ──────────────────────────────────────────────
+  coordinator:
+    build: .
+    container_name: mapreduce-coordinator
+    command: python coordinator.py --mode docker --reducers 2
+    environment:
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - mapreduce-output:/app/output
+    networks:
+      - mapreduce-net
+    depends_on:
+      - reduce-0
+      - reduce-1
+
+# ── Volumes et réseau ────────────────────────────────────────
+volumes:
+  mapreduce-output:   # volume partagé entre reducers et coordinator
+
+networks:
+  mapreduce-net:
+    driver: bridge

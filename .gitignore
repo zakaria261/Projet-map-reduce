@@ -1,6 +1,24 @@
-target/
-*.class
-.claude/
-tmp/
-data/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environnement
+.env
+.venv/
+venv/
+
+# Résultats (générés à l'exécution)
+output/
+result_*.json
+
+# Docker
+.docker/
+
+# OS
 .DS_Store
+tmp/
+
+# IDE
+.vscode/
+.idea/
