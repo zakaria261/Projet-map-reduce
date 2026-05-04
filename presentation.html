@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MapReduce Distribué</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background: #fff; }
+
+/* ── DIAPORAMA ── */
+.deck { width: 100%; height: 100%; position: relative; }
+
+.slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: flex-start;
+  padding: 80px 100px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .4s ease;
+  background: #fff;
+  overflow: hidden;
+}
+.slide.active { opacity: 1; pointer-events: all; }
+
+/* ── BARRE DE PROGRESSION ── */
+#progress {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: #6366f1; z-index: 200;
+  transition: width .4s ease;
+}
+
+/* ── SLIDE COUNTER ── */
+#counter {
+  position: fixed; bottom: 28px; right: 36px;
+  font-size: .78rem; color: #bbb; font-weight: 500;
+  letter-spacing: .06em; z-index: 200;
+}
+
+/* ── NAVIGATION ── */
+.nav-btn {
+  position: fixed; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(0,0,0,0.07); border: none; cursor: pointer;
+  font-size: 1.1rem; color: #666; z-index: 200;
+  transition: background .2s, color .2s;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-btn:hover { background: rgba(0,0,0,0.13); color: #111; }
+#prev { left: 20px; }
+#next { right: 20px; }
+
+/* ── NOTES PRÉSENTATEUR ── */
+#notes-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #1e1e2e; color: #cdd6f4;
+  font-size: .82rem; line-height: 1.6;
+  padding: 10px 36px 12px;
+  display: none; z-index: 300;
+  border-top: 2px solid #313244;
+}
+#notes-bar strong { color: #cba6f7; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; }
+#notes-toggle {
+  position: fixed; bottom: 16px; left: 36px;
+  background: none; border: 1px solid #ddd; border-radius: 8px;
+  font-size: .72rem; color: #aaa; padding: 5px 12px; cursor: pointer;
+  z-index: 400; font-family: 'JetBrains Mono', monospace;
+  transition: all .2s;
+}
+#notes-toggle:hover { border-color: #999; color: #555; }
+#notes-toggle.on { border-color: #6366f1; color: #6366f1; }
+
+/* ══════════════════════════════════════════
+   TYPOGRAPHIE SLIDES
+══════════════════════════════════════════ */
+
+.tag {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: .72rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: #6366f1; margin-bottom: 20px;
+}
+.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: #6366f1; }
+
+.big-title {
+  font-size: clamp(3rem, 6vw, 5.5rem);
+  font-weight: 900; line-height: 1.05;
+  letter-spacing: -.04em; color: #0a0a0a;
+  margin-bottom: 24px;
+}
+.big-title em { color: #6366f1; font-style: normal; }
+
+.slide-title {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 900; letter-spacing: -.03em;
+  color: #0a0a0a; margin-bottom: 36px; line-height: 1.1;
+}
+.slide-title em { color: #6366f1; font-style: normal; }
+
+.lead {
+  font-size: 1.15rem; color: #555; line-height: 1.7;
+  max-width: 640px; margin-bottom: 48px;
+}
+
+/* ── BULLET LIST ── */
+.blist { list-style: none; display: flex; flex-direction: column; gap: 16px; max-width: 780px; }
+.blist li {
+  display: flex; align-items: flex-start; gap: 16px;
+  font-size: 1.05rem; line-height: 1.55; color: #222;
+}
+.blist li .ico {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; background: #f4f4f5; margin-top: 1px;
+}
+.blist li strong { font-weight: 700; color: #0a0a0a; }
+
+/* ── GRID 2 & 3 ── */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 880px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; width: 100%; max-width: 900px; }
+.g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; width: 100%; max-width: 860px; }
+
+/* ── CARD ── */
+.card {
+  background: #fafafa; border: 1.5px solid #ebebeb;
+  border-radius: 18px; padding: 28px 26px;
+}
+.card .card-icon { font-size: 1.6rem; margin-bottom: 12px; }
+.card .card-title { font-size: .95rem; font-weight: 800; color: #0a0a0a; margin-bottom: 8px; }
+.card .card-body { font-size: .83rem; color: #666; line-height: 1.6; }
+
+/* ── PHASE STRIP ── */
+.phases { display: flex; gap: 0; width: 100%; max-width: 900px; }
+.phase-item {
+  flex: 1; padding: 28px 20px; text-align: center;
+  border: 1.5px solid #ebebeb; border-radius: 16px;
+  margin: 0 6px; background: #fff;
+  transition: transform .2s, box-shadow .2s;
+}
+.phase-item:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,.07); }
+.phase-num { font-family: 'JetBrains Mono', monospace; font-size: .62rem; letter-spacing: .14em; color: #ccc; margin-bottom: 8px; }
+.phase-name { font-size: 1rem; font-weight: 800; margin-bottom: 10px; }
+.phase-desc { font-size: .78rem; color: #888; line-height: 1.5; }
+.ph-map .phase-name    { color: #6366f1; border-bottom: 3px solid #6366f1; padding-bottom: 8px; }
+.ph-shuffle .phase-name { color: #06b6d4; border-bottom: 3px solid #06b6d4; padding-bottom: 8px; }
+.ph-reduce .phase-name  { color: #10b981; border-bottom: 3px solid #10b981; padding-bottom: 8px; }
+.ph-merge .phase-name   { color: #f59e0b; border-bottom: 3px solid #f59e0b; padding-bottom: 8px; }
+
+/* ── CODE ── */
+.code {
+  background: #111; border-radius: 14px;
+  padding: 22px 28px; font-family: 'JetBrains Mono', monospace;
+  font-size: .82rem; line-height: 1.85; color: #e5e5e5;
+  width: 100%; max-width: 700px; overflow-x: auto;
+}
+.wbar { display: flex; gap: 6px; margin-bottom: 16px; }
+.wd { width: 10px; height: 10px; border-radius: 50%; }
+.wr { background: #ff5f56; } .wy { background: #ffbd2e; } .wg { background: #27c93f; }
+.k { color: #818cf8; } .s { color: #4ade80; } .c { color: #555; } .v { color: #fb923c; }
+
+/* ── DEPLOY CARDS ── */
+.deploy-card {
+  background: #fafafa; border: 1.5px solid #ebebeb;
+  border-radius: 18px; padding: 28px;
+}
+.d-badge {
+  display: inline-block; font-size: .65rem; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  padding: 4px 12px; border-radius: 100px; margin-bottom: 14px;
+}
+.db-i { background: #eef2ff; color: #6366f1; }
+.db-c { background: #ecfeff; color: #0891b2; }
+.db-a { background: #fffbeb; color: #d97706; }
+.deploy-card .d-title { font-size: 1rem; font-weight: 800; color: #0a0a0a; margin-bottom: 8px; }
+.deploy-card .d-desc { font-size: .82rem; color: #777; margin-bottom: 16px; line-height: 1.55; }
+.mini-code {
+  background: #111; border-radius: 10px; padding: 14px 16px;
+  font-family: 'JetBrains Mono', monospace; font-size: .74rem;
+  line-height: 1.7; color: #ccc;
+}
+
+/* ── TECH CHIP ── */
+.tech-chip {
+  background: #fafafa; border: 1.5px solid #ebebeb;
+  border-radius: 14px; padding: 22px 18px; text-align: center;
+}
+.tech-chip .t-icon { font-size: 1.6rem; margin-bottom: 8px; }
+.tech-chip .t-name { font-size: .88rem; font-weight: 700; color: #0a0a0a; margin-bottom: 3px; }
+.tech-chip .t-info { font-size: .73rem; color: #aaa; }
+
+/* ── SLIDE HERO SPÉCIAL ── */
+.hero-chips { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }
+.h-chip {
+  display: flex; align-items: center; gap: 10px;
+  background: #fafafa; border: 1.5px solid #ebebeb;
+  border-radius: 100px; padding: 10px 20px;
+  font-size: .9rem; font-weight: 600; color: #0a0a0a;
+}
+.av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; color: #fff; }
+.a1 { background: #6366f1; } .a2 { background: #10b981; } .a3 { background: #f59e0b; }
+
+/* ── STAT PILLS ── */
+.stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 40px; }
+.stat { background: #fafafa; border: 1.5px solid #ebebeb; border-radius: 14px; padding: 18px 28px; }
+.stat .sv { font-size: 1.7rem; font-weight: 900; color: #0a0a0a; display: block; }
+.stat .sl { font-size: .72rem; color: #aaa; font-weight: 500; }
+
+/* ── SLIDE FINAL ── */
+#s-final { background: #0a0a0a !important; align-items: center; text-align: center; }
+#s-final .big-title { color: #fff; }
+#s-final .big-title em { color: #818cf8; }
+#s-final .lead { color: rgba(255,255,255,.45); }
+#s-final .tag { color: #818cf8; }
+#s-final .tag .dot { background: #818cf8; }
+#s-final .h-chip { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); color: #fff; }
+#s-final .key-pills { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 32px 0; }
+#s-final .kp {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 100px; padding: 9px 20px; font-size: .84rem; font-weight: 600; color: #fff;
+}
+
+/* ── SLIDE ACCENT BANDE ── */
+.accent-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, #6366f1, #06b6d4, #10b981);
+  display: none;
+}
+.slide.active .accent-bar { display: block; }
+
+/* ── NUMÉRO SLIDE COIN ── */
+.slide-num {
+  position: absolute; top: 32px; right: 36px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .72rem; color: #ddd; letter-spacing: .08em;
+}
+#s-final .slide-num { color: rgba(255,255,255,.2); }
+
+/* ── SEPARATEUR VERTICAL HERO ── */
+.hero-divider {
+  width: 1px; height: 100%; background: #f0f0f0;
+  position: absolute; right: 0; top: 0;
+}
+
+/* ── HIGHLIGHT INLINE ── */
+.hi { color: #6366f1; font-weight: 600; }
+.hc { color: #0891b2; font-weight: 600; }
+.hg { color: #10b981; font-weight: 600; }
+.ha { color: #d97706; font-weight: 600; }
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .82em; background: #f1f1f1;
+  padding: 2px 7px; border-radius: 5px; color: #444;
+}
+
+/* ── FLECHE FLOW ── */
+.arrow { font-size: 1.3rem; color: #ccc; align-self: center; }
+
+/* RESPONSIVE minimal */
+@media (max-width: 768px) {
+  .slide { padding: 60px 28px; }
+  .g2, .g3, .g4 { grid-template-columns: 1fr; }
+  .phases { flex-direction: column; }
+  .big-title { font-size: 2.4rem; }
+}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<span id="counter"></span>
+<button class="nav-btn" id="prev">‹</button>
+<button class="nav-btn" id="next">›</button>
+<button id="notes-toggle">notes [N]</button>
+<div id="notes-bar"><strong>Notes —</strong> <span id="note-text"></span></div>
+
+<div class="deck">
+
+  <!-- ════════════════════ S1 — TITRE ════════════════════ -->
+  <div class="slide active" id="s-intro"
+    data-note="Bonjour. Notre projet implémente MapReduce from scratch en Python, sans aucune librairie externe. On va vous montrer l'architecture, comment les données circulent, et les trois modes de déploiement.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">01 / 09</div>
+
+    <div class="tag"><span class="dot"></span> Systèmes distribués · 2025</div>
+
+    <h1 class="big-title">
+      Map<em>Reduce</em><br>Distribué
+    </h1>
+
+    <div class="stats">
+      <div class="stat"><span class="sv">0</span><span class="sl">Dépendances</span></div>
+      <div class="stat"><span class="sv">4</span><span class="sl">Composants</span></div>
+      <div class="stat"><span class="sv">3</span><span class="sl">Modes deploy</span></div>
+      <div class="stat"><span class="sv">TCP</span><span class="sl">Protocole</span></div>
+    </div>
+
+    <p class="lead">
+      Implémentation from-scratch du paradigme <strong>MapReduce</strong> en Python pur —
+      comptage de fréquences de mots distribué sur un vrai réseau.
+    </p>
+
+    <div class="hero-chips">
+      <div class="h-chip"><div class="av a1">RZ</div> Rahou Zakaria</div>
+      <div class="h-chip"><div class="av a2">AA</div> Abidi Amine</div>
+      <div class="h-chip"><div class="av a3">MO</div> Makboul Othmane</div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ S2 — C'EST QUOI ════════════════════ -->
+  <div class="slide" id="s-what"
+    data-note="MapReduce c'est un modèle inventé par Google en 2004 pour traiter des térabytes de données en parallèle. On l'a réimplémenté de zéro pour comprendre vraiment comment ça marche en dessous.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">02 / 09</div>
+
+    <div class="tag"><span class="dot"></span> Contexte</div>
+    <h2 class="slide-title">Qu'est-ce que <em>MapReduce</em> ?</h2>
+
+    <ul class="blist">
+      <li>
+        <div class="ico">🏭</div>
+        <div><strong>Paradigme de calcul distribué</strong> inventé par Google (2004) — base de Hadoop, Spark et consorts.</div>
+      </li>
+      <li>
+        <div class="ico">📂</div>
+        <div><strong>Idée principale :</strong> diviser un gros problème en tâches indépendantes (Map), les traiter en parallèle, puis agréger les résultats (Reduce).</div>
+      </li>
+      <li>
+        <div class="ico">🎯</div>
+        <div><strong>Notre cas d'usage :</strong> compter la fréquence de chaque mot dans plusieurs fichiers texte, en parallèle sur plusieurs machines.</div>
+      </li>
+      <li>
+        <div class="ico">🔧</div>
+        <div><strong>Notre contrainte :</strong> Python pur, stdlib uniquement — aucun framework distribué, tout fait à la main.</div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ════════════════════ S3 — ARCHITECTURE ════════════════════ -->
+  <div class="slide" id="s-arch"
+    data-note="Notre système a 4 phases. Le coordinateur orchestre tout. Les workers MAP traitent chacun un fichier. Les workers REDUCE agrègent. À la fin le coordinateur fusionne et affiche le top-N.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">03 / 09</div>
+
+    <div class="tag"><span class="dot"></span> Architecture</div>
+    <h2 class="slide-title">4 phases, 3 composants</h2>
+
+    <div class="phases" style="margin-bottom: 32px;">
+      <div class="phase-item ph-map">
+        <div class="phase-num">01</div>
+        <div class="phase-name">MAP</div>
+        <div class="phase-desc">1 worker par fichier<br>Lit, tokenise, compte<br>Ouvre un socket TCP</div>
+      </div>
+      <div class="phase-item ph-shuffle">
+        <div class="phase-num">02</div>
+        <div class="phase-name">SHUFFLE</div>
+        <div class="phase-desc">Les REDUCE tirent leurs données<br>Routage par hash MD5<br>Chaque mot → 1 seul reducer</div>
+      </div>
+      <div class="phase-item ph-reduce">
+        <div class="phase-num">03</div>
+        <div class="phase-name">REDUCE</div>
+        <div class="phase-desc">Agrège tous les MAP<br>Somme les occurrences<br>Sauvegarde en JSON</div>
+      </div>
+      <div class="phase-item ph-merge">
+        <div class="phase-num">04</div>
+        <div class="phase-name">MERGE</div>
+        <div class="phase-desc">Coordinateur fusionne<br>Trie par fréquence<br>Affiche le Top-N</div>
+      </div>
+    </div>
+
+    <div class="g3" style="max-width:900px;">
+      <div class="card">
+        <div class="card-icon">🔵</div>
+        <div class="card-title" style="color:#6366f1">MAP Worker</div>
+        <div class="card-body"><code>map_worker.py</code> — 1 par fichier, ouvre un port TCP (6000+id), attend que les reducers viennent chercher les données.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🟢</div>
+        <div class="card-title" style="color:#10b981">REDUCE Worker</div>
+        <div class="card-body"><code>reduce_worker.py</code> — contacte tous les MAP, agrège les mots de sa partition, écrit <code>result_reducer_N.json</code>.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🟡</div>
+        <div class="card-title" style="color:#d97706">Coordinateur</div>
+        <div class="card-body"><code>coordinator.py</code> — orchestre le lancement, attend les résultats, fusionne et affiche. Supporte local et Docker.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ S4 — PHASE MAP ════════════════════ -->
+  <div class="slide" id="s-map"
+    data-note="Le worker MAP lit un seul fichier texte. Il extrait les mots avec une regex qui supporte aussi les lettres accentuées. Il filtre 50+ stopwords comme 'le', 'de', 'the'... et les mots de moins de 3 caractères. Puis il ouvre un serveur TCP et attend.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">04 / 09</div>
+
+    <div class="tag" style="color:#6366f1;"><span class="dot" style="background:#6366f1"></span> Phase 1</div>
+    <h2 class="slide-title" style="color:#6366f1;">MAP — Lire et compter</h2>
+
+    <div class="g2" style="max-width:900px; align-items: start;">
+      <ul class="blist">
+        <li>
+          <div class="ico">📄</div>
+          <div><strong>Un fichier par worker</strong> — le coordinateur assigne un fichier à chaque MAP worker au démarrage.</div>
+        </li>
+        <li>
+          <div class="ico">🔡</div>
+          <div><strong>Tokenisation regex</strong> — <code>[a-zA-ZÀ-ÿ]+</code> — supporte les accents français (é, è, ê, ô…)</div>
+        </li>
+        <li>
+          <div class="ico">🚫</div>
+          <div><strong>Filtrage</strong> — 50+ stopwords (le, de, the, and…) et mots &lt; 3 caractères ignorés.</div>
+        </li>
+        <li>
+          <div class="ico">🔌</div>
+          <div><strong>Serveur TCP</strong> — ouvre un socket sur le port <span class="hi">6000 + son ID</span> et attend les connexions des reducers.</div>
+        </li>
+      </ul>
+
+      <div class="code">
+        <div class="wbar"><div class="wd wr"></div><div class="wd wy"></div><div class="wd wg"></div></div>
+<span class="c"># Extraction des mots (avec accents)</span>
+words = re.findall(<span class="s">[a-zA-ZÀ-ÿ]+</span>, text.lower())
+
+<span class="c"># Filtrage stopwords + longueur</span>
+<span class="k">for</span> w <span class="k">in</span> words:
+  <span class="k">if</span> w <span class="k">not in</span> STOPWORDS <span class="k">and</span> len(w) > <span class="v">2</span>:
+      counts[w] = counts.get(w, <span class="v">0</span>) + <span class="v">1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ S5 — SHUFFLE + REDUCE ════════════════════ -->
+  <div class="slide" id="s-shuffle"
+    data-note="Le SHUFFLE c'est la partie réseau. Chaque reducer se connecte à chaque MAP worker et tire les mots qui lui appartiennent. Un mot appartient à un reducer selon hash MD5 du mot modulo le nombre de reducers. On utilise MD5 et pas hash() de Python car Python randomise hash() à chaque exécution.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">05 / 09</div>
+
+    <div class="tag" style="color:#06b6d4;"><span class="dot" style="background:#06b6d4"></span> Phase 2 & 3</div>
+    <h2 class="slide-title" style="color:#06b6d4;">SHUFFLE + REDUCE — Regrouper et agréger</h2>
+
+    <div class="g2" style="max-width:900px; align-items: start;">
+      <ul class="blist">
+        <li>
+          <div class="ico">↕️</div>
+          <div><strong>Pull TCP</strong> — chaque reducer se connecte à chaque MAP worker et demande ses mots via un message JSON.</div>
+        </li>
+        <li>
+          <div class="ico">🔒</div>
+          <div>
+            <strong>Partitionnement MD5</strong> — <code>hash(mot) % N_reducers</code>.
+            On utilise MD5 car <code>hash()</code> Python change à chaque exécution (PYTHONHASHSEED). MD5 est <span class="hi">toujours identique</span>.
+          </div>
+        </li>
+        <li>
+          <div class="ico">🔄</div>
+          <div><strong>Backoff exponentiel</strong> — 20 tentatives × 1s si un MAP n'est pas encore prêt. Robustesse réseau.</div>
+        </li>
+        <li>
+          <div class="ico">💾</div>
+          <div><strong>Résultat partiel</strong> — chaque reducer écrit son propre fichier <code>result_reducer_N.json</code> avec ses mots triés.</div>
+        </li>
+      </ul>
+
+      <div class="code">
+        <div class="wbar"><div class="wd wr"></div><div class="wd wy"></div><div class="wd wg"></div></div>
+<span class="c"># Partitionnement déterministe</span>
+<span class="k">def</span> get_reducer_for_word(word, N):
+    h = int(hashlib.md5(
+        word.encode()
+    ).hexdigest(), <span class="v">16</span>)
+    <span class="k">return</span> h % N
+
+<span class="c"># Protocole TCP — préfixe de longueur</span>
+<span class="k">def</span> send_data(sock, data):
+    payload = json.dumps(data).encode()
+    length  = struct.pack(<span class="s">'>I'</span>, len(payload))
+    sock.sendall(length + payload)
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ S6 — PROTOCOLE TCP ════════════════════ -->
+  <div class="slide" id="s-proto"
+    data-note="Un point technique important : TCP est un flux d'octets, pas de messages. Sans framing, si on envoie un gros JSON il peut arriver coupé en morceaux. On résout ça avec le length-prefix : on envoie d'abord 4 octets qui disent combien d'octets suivent. Le receveur lit exactement ce nombre d'octets. Aucune troncature possible.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">06 / 09</div>
+
+    <div class="tag"><span class="dot"></span> Détail technique</div>
+    <h2 class="slide-title">Protocole TCP <em>length-prefix</em></h2>
+
+    <div class="g2" style="max-width: 900px; align-items: start;">
+      <ul class="blist">
+        <li>
+          <div class="ico">⚠️</div>
+          <div><strong>Le problème :</strong> TCP est un flux d'octets continu. Un gros JSON peut arriver en plusieurs morceaux — ou deux messages collés ensemble.</div>
+        </li>
+        <li>
+          <div class="ico">✅</div>
+          <div>
+            <strong>La solution :</strong> chaque message est précédé de <span class="hi">4 octets big-endian</span> indiquant sa taille. Le receveur lit exactement ce nombre d'octets.
+          </div>
+        </li>
+        <li>
+          <div class="ico">📡</div>
+          <div><strong>Format :</strong> <code>[ 4 octets taille ][ payload JSON UTF-8 ]</code></div>
+        </li>
+        <li>
+          <div class="ico">⏱️</div>
+          <div><strong>Timeout 15s</strong> par connexion MAP pour éviter les blocages infinis en cas de nœud mort.</div>
+        </li>
+      </ul>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="background:#f8f8f8; border:1.5px solid #ebebeb; border-radius:14px; padding:22px; font-size:.88rem; line-height:1.7;">
+          <div style="font-weight:700; color:#0a0a0a; margin-bottom:12px; font-size:.95rem;">Flux réseau :</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:.8rem; color:#555;">
+            <span style="color:#6366f1">│ 0x00 0x00 0x00 0x48 │</span> ← taille (72 octets)<br>
+            <span style="color:#10b981">│ {"bonjour":5, ...}   │</span> ← payload JSON<br>
+            <span style="color:#6366f1">│ 0x00 0x00 0x01 0xF4 │</span> ← taille msg suivant<br>
+            <span style="color:#10b981">│ {"monde":12, ...}    │</span> ← payload suivant
+          </div>
+        </div>
+        <div class="card" style="border-color:#e0e7ff;">
+          <div class="card-title" style="color:#6366f1; font-size:.85rem;">Résultat</div>
+          <div class="card-body">Aucune troncature, aucun chevauchement de messages possible — même sous forte charge réseau.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ S7 — DÉPLOIEMENT ════════════════════ -->
+  <div class="slide" id="s-deploy"
+    data-note="On a trois modes. Local : tout tourne en sous-processus sur une machine, pratique pour tester. Docker : 6 conteneurs isolés sur un bridge réseau, ça simule un vrai cluster. LAN multi-machines : chaque membre du groupe lance un MAP worker sur sa machine, et on configure leurs IPs dans MAP_HOSTS.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">07 / 09</div>
+
+    <div class="tag"><span class="dot"></span> Déploiement</div>
+    <h2 class="slide-title">3 modes, <em>une seule codebase</em></h2>
+
+    <div class="g3" style="max-width: 960px;">
+      <div class="deploy-card">
+        <div class="d-badge db-i">Local</div>
+        <div class="d-title">Machine unique</div>
+        <div class="d-desc">Le coordinateur lance les workers comme sous-processus. Aucune config requise.</div>
+        <div class="mini-code">
+          <span style="color:#818cf8">python</span> coordinator.py<br>
+          <span style="color:#555">  --reducers 4 --top 20</span>
+        </div>
+      </div>
+      <div class="deploy-card">
+        <div class="d-badge db-c">Docker</div>
+        <div class="d-title">Cluster simulé</div>
+        <div class="d-desc">6 conteneurs sur bridge Docker. MAP workers dans des conteneurs séparés. Volume partagé pour l'output.</div>
+        <div class="mini-code">
+          <span style="color:#818cf8">docker-compose</span> up --build<br>
+          <span style="color:#555"># 3 MAP + 2 REDUCE + coord</span>
+        </div>
+      </div>
+      <div class="deploy-card">
+        <div class="d-badge db-a">LAN réel</div>
+        <div class="d-title">Multi-machines</div>
+        <div class="d-desc">Chaque machine du groupe lance un MAP. Les IPs sont configurées dans une variable d'environnement.</div>
+        <div class="mini-code">
+          <span style="color:#555"># fichier .env</span><br>
+          <span style="color:#818cf8">MAP_HOSTS</span>=<span style="color:#4ade80">192.168.1.42:6000,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;192.168.1.43:6001</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px; background: #fafafa; border: 1.5px solid #ebebeb; border-radius: 16px; padding: 22px 28px; max-width: 960px; width: 100%;">
+      <div style="font-size:.82rem; color:#888; line-height:1.7;">
+        <strong style="color:#0a0a0a;">Résolution d'adresse (priorité décroissante) :</strong>
+        &nbsp;&nbsp;
+        <span class="hi">①</span> <code>MAP_HOSTS</code> (IPs LAN explicites)
+        &nbsp;→&nbsp;
+        <span class="hc">②</span> <code>MAP_HOST_PREFIX</code> (noms Docker : map-0, map-1…)
+        &nbsp;→&nbsp;
+        <span class="hg">③</span> Localhost (mode local par défaut)
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ S8 — STACK ════════════════════ -->
+  <div class="slide" id="s-tech"
+    data-note="Le vrai défi du projet c'était de ne pas utiliser Hadoop, Spark ou n'importe quel framework distribué. Tout est fait avec la bibliothèque standard Python : les sockets, le threading, le JSON, hashlib pour MD5. Zéro pip install.">
+    <div class="accent-bar"></div>
+    <div class="slide-num">08 / 09</div>
+
+    <div class="tag"><span class="dot"></span> Stack technique</div>
+    <h2 class="slide-title">Zéro dépendance, <em>100% stdlib</em></h2>
+
+    <p class="lead" style="margin-bottom: 36px;">
+      Le défi : tout reconstruire depuis les primitives Python — aucun <code>pip install</code>.
+    </p>
+
+    <div class="g4" style="max-width: 900px;">
+      <div class="tech-chip">
+        <div class="t-icon">🐍</div>
+        <div class="t-name">Python 3.11</div>
+        <div class="t-info">Langage principal</div>
+      </div>
+      <div class="tech-chip">
+        <div class="t-icon">🔌</div>
+        <div class="t-name">socket</div>
+        <div class="t-info">TCP client & serveur</div>
+      </div>
+      <div class="tech-chip">
+        <div class="t-icon">🔒</div>
+        <div class="t-name">hashlib</div>
+        <div class="t-info">MD5 déterministe</div>
+      </div>
+      <div class="tech-chip">
+        <div class="t-icon">📦</div>
+        <div class="t-name">json</div>
+        <div class="t-info">Sérialisation</div>
+      </div>
+      <div class="tech-chip">
+        <div class="t-icon">🧵</div>
+        <div class="t-name">threading</div>
+        <div class="t-info">Attente parallèle</div>
+      </div>
+      <div class="tech-chip">
+        <div class="t-icon">🔎</div>
+        <div class="t-name">re</div>
+        <div class="t-info">Regex Unicode</div>
+      </div>
+      <div class="tech-chip">
+        <div class="t-icon">🐳</div>
+        <div class="t-name">Docker</div>
+        <div class="t-info">Compose + bridge</div>
+      </div>
+      <div class="tech-chip">
+        <div class="t-icon">🌐</div>
+        <div class="t-name">LAN</div>
+        <div class="t-info">Cluster réel</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ S9 — FINAL ════════════════════ -->
+  <div class="slide" id="s-final"
+    data-note="Pour conclure : on a implémenté MapReduce de zéro, avec des vrais sockets TCP, un protocole robuste, et trois modes de déploiement dont un cluster LAN réel. Merci, on est disponibles pour les questions.">
+    <div class="slide-num">09 / 09</div>
+
+    <div class="tag"><span class="dot"></span> Conclusion</div>
+
+    <h1 class="big-title" style="text-align:center; max-width:700px;">
+      Un vrai cluster<br><em>distribué</em>,<br>fait de A à Z.
+    </h1>
+
+    <div class="key-pills">
+      <div class="kp">TCP length-prefix</div>
+      <div class="kp">MD5 déterministe</div>
+      <div class="kp">Backoff exponentiel</div>
+      <div class="kp">0 dépendance externe</div>
+      <div class="kp">3 modes de déploiement</div>
+      <div class="kp">Cluster LAN réel</div>
+    </div>
+
+    <div class="hero-chips">
+      <div class="h-chip"><div class="av a1">RZ</div> Rahou Zakaria</div>
+      <div class="h-chip"><div class="av a2">AA</div> Abidi Amine</div>
+      <div class="h-chip"><div class="av a3">MO</div> Makboul Othmane</div>
+    </div>
+
+    <p style="margin-top: 48px; font-family:'JetBrains Mono',monospace; font-size:.8rem; color:rgba(255,255,255,.25); letter-spacing:.12em; text-align:center;">
+      Merci — Des questions ?
+    </p>
+  </div>
+
+</div><!-- /deck -->
+
+<script>
+  const slides    = document.querySelectorAll('.slide');
+  const progress  = document.getElementById('progress');
+  const counter   = document.getElementById('counter');
+  const noteText  = document.getElementById('note-text');
+  const notesBar  = document.getElementById('notes-bar');
+  const notesBtn  = document.getElementById('notes-toggle');
+  let cur = 0;
+  let notesOpen = false;
+
+  function go(n) {
+    slides[cur].classList.remove('active');
+    cur = Math.max(0, Math.min(n, slides.length - 1));
+    slides[cur].classList.add('active');
+    progress.style.width = ((cur + 1) / slides.length * 100) + '%';
+    counter.textContent = (cur + 1) + ' / ' + slides.length;
+    noteText.textContent = slides[cur].dataset.note || '';
+    // Couleur counter sur fond noir
+    counter.style.color = cur === slides.length - 1 ? 'rgba(255,255,255,.2)' : '#bbb';
+  }
+
+  document.getElementById('next').addEventListener('click', () => go(cur + 1));
+  document.getElementById('prev').addEventListener('click', () => go(cur - 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); go(cur - 1); }
+    if (e.key === 'n' || e.key === 'N') toggleNotes();
+  });
+
+  // Touch / swipe
+  let tx = 0;
+  document.addEventListener('touchstart', e => tx = e.touches[0].clientX);
+  document.addEventListener('touchend',   e => {
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 50) go(dx < 0 ? cur + 1 : cur - 1);
+  });
+
+  function toggleNotes() {
+    notesOpen = !notesOpen;
+    notesBar.style.display = notesOpen ? 'block' : 'none';
+    notesBtn.classList.toggle('on', notesOpen);
+  }
+  notesBtn.addEventListener('click', toggleNotes);
+
+  go(0);
+</script>
+</body>
+</html>
