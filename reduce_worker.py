@@ -1,21 +1,16 @@
 """
 reduce_worker.py — Worker REDUCE
 
-Rôle : Agréger les comptages d'un sous-ensemble de mots provenant de TOUS les MAP.
+Rôle : agréger les comptages d'un sous-ensemble de mots venant de TOUS les MAPs.
 
-Fonctionnement :
-1. Se connecte à chaque worker MAP via get_map_address() (local, Docker ou LAN)
-2. Demande les mots dont il est responsable (phase SHUFFLE)
-3. Additionne les comptages de la même clé venant de sources différentes
-4. Sauvegarde son résultat dans OUTPUT_DIR/result_reducer_X.json
+Étapes :
+  1. Se connecte à chaque worker MAP et demande ses mots (phase SHUFFLE)
+  2. Additionne les comptages du même mot depuis plusieurs sources
+  3. Sauvegarde le résultat dans output/result_reducer_X.json
 
 Usage :
     python reduce_worker.py <reducer_id> <num_mappers> <num_reducers>
-
-Variables d'environnement :
-    MAP_HOSTS        : "192.168.1.42:6000,192.168.1.43:6001" (mode multi-machine)
-    MAP_HOST_PREFIX  : "map-" (mode Docker Compose)
-    OUTPUT_DIR       : dossier de sortie (défaut: ".")
+    python reduce_worker.py 0 3 2
 """
 
 import socket
@@ -35,74 +30,58 @@ def run_reduce_worker(reducer_id, num_mappers, num_reducers):
     total_word_count = {}
     start = time.time()
 
-    # ── Phase SHUFFLE : collecter les données depuis chaque MAP ──────────
+    # ── SHUFFLE : récupérer les mots depuis chaque MAP ───────────
     for map_id in range(num_mappers):
-        map_host, map_port = get_map_address(map_id)
-        print(f"  [REDUCE {reducer_id}] Connexion au MAP {map_id} ({map_host}:{map_port})...")
+        host, port = get_map_address(map_id)
+        print(f"  [REDUCE {reducer_id}] Connexion → MAP {map_id} ({host}:{port})")
 
-        # Retry avec backoff — le MAP peut mettre du temps à démarrer
+        # Retry avec backoff exponentiel (le MAP peut encore démarrer)
         connected = False
-        for attempt in range(20):  # 20 tentatives × 1s = 20s max
+        for attempt in range(20):
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(15.0)  # timeout par opération
-                sock.connect((map_host, map_port))
+                sock.settimeout(15.0)
+                sock.connect((host, port))
                 connected = True
                 break
             except (ConnectionRefusedError, OSError):
-                print(f"  [REDUCE {reducer_id}] MAP {map_id} pas prêt, retry {attempt+1}/20...")
+                print(f"  [REDUCE {reducer_id}] MAP {map_id} pas prêt ({attempt+1}/20)...")
                 time.sleep(1.0)
 
         if not connected:
-            print(f"  [REDUCE {reducer_id}] ERREUR : impossible de joindre MAP {map_id} après 20 tentatives")
+            print(f"  [REDUCE {reducer_id}] ⚠️  Impossible de joindre MAP {map_id}")
             continue
 
-        # Envoyer la demande : "donne-moi les mots dont je suis responsable"
         send_data(sock, {"reducer_id": reducer_id})
-
-        # Recevoir les mots
         response = recv_data(sock)
         sock.close()
 
         if response is None:
-            print(f"  [REDUCE {reducer_id}] ERREUR : réponse vide du MAP {map_id}")
+            print(f"  [REDUCE {reducer_id}] ⚠️  Réponse vide du MAP {map_id}")
             continue
 
-        words_from_map = response.get("words", {})
-        print(f"  [REDUCE {reducer_id}] ← MAP {map_id} ({map_host}:{map_port}) : {len(words_from_map)} mots reçus")
+        words = response.get("words", {})
+        print(f"  [REDUCE {reducer_id}] ← MAP {map_id} : {len(words)} mots reçus")
 
-        # ── Phase REDUCE : additionner les comptages ─────────────────────
-        for word, count in words_from_map.items():
+        # ── REDUCE : additionner les comptages ───────────────────
+        for word, count in words.items():
             total_word_count[word] = total_word_count.get(word, 0) + count
 
-    elapsed = time.time() - start
+    # ── Tri et sauvegarde ────────────────────────────────────────
+    sorted_result = dict(sorted(total_word_count.items(), key=lambda x: x[1], reverse=True))
 
-    # ── Tri du résultat par occurrences décroissantes ────────────────────
-    sorted_result = dict(
-        sorted(total_word_count.items(), key=lambda x: x[1], reverse=True)
-    )
-
-    # ── Sauvegarde dans OUTPUT_DIR ───────────────────────────────────────
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_file = os.path.join(OUTPUT_DIR, f"result_reducer_{reducer_id}.json")
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(sorted_result, f, ensure_ascii=False, indent=2)
 
-    print(f"\n  [REDUCE {reducer_id}] Terminé en {elapsed:.3f}s")
-    print(f"  [REDUCE {reducer_id}] {len(sorted_result)} mots distincts traités")
-    print(f"  [REDUCE {reducer_id}] Résultat → '{output_file}'")
-
-    top5 = list(sorted_result.items())[:5]
-    print(f"  [REDUCE {reducer_id}] Top 5 : {top5}")
+    elapsed = time.time() - start
+    print(f"\n  [REDUCE {reducer_id}] Terminé en {elapsed:.3f}s — {len(sorted_result)} mots")
+    print(f"  [REDUCE {reducer_id}] Top 5 : {list(sorted_result.items())[:5]}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
         print("Usage : python reduce_worker.py <reducer_id> <num_mappers> <num_reducers>")
         sys.exit(1)
-
-    reducer_id   = int(sys.argv[1])
-    num_mappers  = int(sys.argv[2])
-    num_reducers = int(sys.argv[3])
-
-    run_reduce_worker(reducer_id, num_mappers, num_reducers)
+    run_reduce_worker(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]))
